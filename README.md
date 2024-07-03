@@ -7,6 +7,18 @@
 
 This is official PyTorch implementation of [Learning to (Learn at Test Time): RNNs with Expressive Hidden States]().
 
+## Abstract
+
+Self-attention performs well in long context but has quadratic complexity. Existing RNN layers
+have linear complexity, but their performance in long context is limited by the expressive power
+of their hidden state. We propose a new class of sequence modeling layers with linear complexity
+and an expressive hidden state. The key idea is to make the hidden state a machine learning
+model itself, and the update rule a step of self-supervised learning. 
+
+Since the hidden state is updated by training even on test sequences, our layers are called **Test-Time Training (TTT) layers**.
+We consider two instantiations: TTT-Linear and TTT-MLP, whose hidden state is a linear model
+and a two-layer MLP respectively. 
+
 ## Environment setup
 
 ```bash
