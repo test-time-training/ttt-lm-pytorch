@@ -1,7 +1,7 @@
 # Learning to (Learn at Test Time): RNNs with Expressive Hidden States
 
 [**Arxiv**]()
-| [**JAX Main Codebase**](https://github.com/test-time-training/ttt-lm-pytorch/TTT-LM)
+| [**JAX Main Codebase**](https://github.com/test-time-training/ttt-lm-jax)
 | [**Setup**](#environment-setup)
 | [**Quick Start**](#quick-start)
 
