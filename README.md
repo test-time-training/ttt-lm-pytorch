@@ -1,11 +1,22 @@
-# Learning to (Learn at Test Time): LLMs with Expressive Hidden States for Long Context
+# Learning to (Learn at Test Time): RNNs with Expressive Hidden States
+
+[**Arxiv**]()
+| [**JAX Main Codebase**](https://github.com/test-time-training/ttt-lm-pytorch/TTT-LM)
+| [**Setup**](#environment-setup)
+| [**Quick Start**](#quick-start)
+
+This is official PyTorch implementation of [Learning to (Learn at Test Time): RNNs with Expressive Hidden States]().
 
 ## Environment setup
+
 ```bash
-pip install transformers
+pip install "transformers[torch]"
 ```
 
 ## Quick start
+
+Our implementation is based on Huggingface Transformers. You can use the following code to load the model and generate text.
+
 ```python
 from transformers import AutoTokenizer
 from modeling_ttt import TTTForCausalLM, TTTConfig, TTT_STANDARD_CONFIGS
@@ -35,4 +46,4 @@ out_str = tokenizer.batch_decode(out_ids, skip_special_tokens=True)
 print(out_str)
 ```
 
-Note: this is a naive implementation of the TTT model for tutorial purpose. Please refer to [Trition]()/[TK]() implementation for faster and more efficient implementation.
+Note: this is only a naive implementation of the TTT model for tutorial purpose. We will release faster kernel implementation shortly.

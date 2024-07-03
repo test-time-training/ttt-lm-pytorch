@@ -4,7 +4,6 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple, Union
 
-import einops
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
@@ -1010,7 +1009,10 @@ class TTTLinearModule(TTTBaseModule):
         if cache_params is not None:
             cache_params.update(batch_params_dic, self.layer_idx, L)
 
-        XQW_batch = einops.rearrange(XQW_batch, "nc b nh cs f -> b (nc cs) (nh f)")  # [B,L,f]
+        # [num_mini_batch, B, num_heads, mini_batch_size, head_dim] -> [B, num_mini_batch, mini_batch_size, num_heads, head_dim]
+        XQW_batch = XQW_batch.permute(1, 0, 3, 2, 4)
+        # [B, L, C]
+        XQW_batch = XQW_batch.reshape(B, L, self.width)
         return XQW_batch, batch_params_dic
 
 
@@ -1191,7 +1193,10 @@ class TTTMLPModule(TTTBaseModule):
         if cache_params is not None:
             cache_params.update(batch_params_dic, self.layer_idx, L)
 
-        XQW_batch = einops.rearrange(XQW_batch, "nc b nh cs f -> b (nc cs) (nh f)")  # [B,L,f]
+        # [num_mini_batch, B, num_heads, mini_batch_size, head_dim] -> [B, num_mini_batch, mini_batch_size, num_heads, head_dim]
+        XQW_batch = XQW_batch.permute(1, 0, 3, 2, 4)
+        # [B, L, C]
+        XQW_batch = XQW_batch.reshape(B, L, self.width)
         return XQW_batch, batch_params_dic
 
 
