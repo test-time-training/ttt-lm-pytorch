@@ -997,13 +997,14 @@ class TTTLinearModule(TTTBaseModule):
         XQW_batch = torch.empty(
             (num_mini_batch, B, self.num_heads, mini_batch_size, self.head_dim), device=device, dtype=dtype
         )
+        # XQW_batch: [num_mini_batch, B, num_heads, mini_batch_size, head_dim]
         batch_params_dic, XQW_batch = scan(
             compute_mini_batch,
             init_params_dic,
             inputs,
             XQW_batch,
             self.config.scan_checkpoint_group_size if self.training else 0,
-        )  # [NC,B,nh,CS,f]
+        )
 
         # [B, num_heads, L, C]
         if cache_params is not None:
@@ -1065,9 +1066,10 @@ class TTTMLPModule(TTTBaseModule):
             ttt_lr_eta_mini_batch = inputs["ttt_lr_eta"]
 
             X1 = XK_mini_batch
-            # [B,nh,K,f] @ [B,nh,f,f] -> [B,nh,K,f]
+            # [B,nh,K,f] @ [B,nh,f,4f] -> [B,nh,K,4f]
             Z1 = X1 @ W1_init + b1_init
             X2 = F.gelu(Z1, approximate="tanh")
+            # [B,nh,K,4f] @ [B,nh,4f,f] -> [B,nh,K,f]
             Z2 = X2 @ W2_init + b2_init
             reconstruction_target = XV_mini_batch - XK_mini_batch
 
@@ -1075,14 +1077,14 @@ class TTTMLPModule(TTTBaseModule):
             ln_bias = self.ttt_norm_bias.reshape(self.num_heads, 1, self.head_dim)
             # [B, nh, K, f]
             grad_l_wrt_Z2 = ln_fused_l2_bwd(Z2, reconstruction_target, ln_weight, ln_bias)
-            # [B, nh, K, f]
+            # [B, nh, K, 4f]
             grad_l_wrt_Z1 = grad_l_wrt_Z2 @ W2_init.transpose(-2, -1) * gelu_bwd(Z1)
 
             if use_dual_form:
                 Attn1 = torch.tril(XQ_mini_batch @ X1.transpose(-2, -1))  # [B,nh,K,K]
-                # [B,nh,1,f] - [B,nh,K,K] @ [B,nh,K,f] -> [B,nh,K,f]
+                # [B,nh,1,f] - [B,nh,K,K] @ [B,nh,K,4f] -> [B,nh,K,4f]
                 b1_bar = b1_init - torch.tril(eta_mini_batch) @ grad_l_wrt_Z1
-                # [B,nh,K,f] @ [B,nh,f,f] - ([B,nh,K,1] * [B,nh,K,K]) @ [B,nh,K,f] + [B,nh,K,f]
+                # [B,nh,K,f] @ [B,nh,f,4f] - ([B,nh,K,1] * [B,nh,K,K]) @ [B,nh,K,4f] + [B,nh,K,4f]
                 Z1_bar = XQ_mini_batch @ W1_init - (eta_mini_batch * Attn1) @ grad_l_wrt_Z1 + b1_bar
                 X2_bar = F.gelu(Z1_bar, approximate="tanh")
 
@@ -1090,15 +1092,15 @@ class TTTMLPModule(TTTBaseModule):
                 Attn2 = torch.tril(X2_bar @ X2.transpose(-2, -1))
                 # [B,nh,1,f] - [B,nh,K,1] * [B,nh,K,f] -> [B,nh,K,f]
                 b2_bar = b2_init - torch.tril(eta_mini_batch) @ grad_l_wrt_Z2
-                # [B,nh,K,f] @ [1,nh,f,f] - ([B,nh,K,1] * [B,nh,K,K]) @ [B,nh,K,f] + [B,nh,K,f]
+                # [B,nh,K,f] @ [1,nh,4f,f] - ([B,nh,K,1] * [B,nh,K,K]) @ [B,nh,K,f] + [B,nh,K,f]
                 Z2_bar = X2_bar @ W2_init - (eta_mini_batch * Attn2) @ grad_l_wrt_Z2 + b2_bar
 
                 last_eta_mini_batch = eta_mini_batch[:, :, -1, :, None]
-                # [B,nh,f,f] - [B,nh,f,K] @ [B,nh,K,f]
+                # [B,nh,f,4f] - [B,nh,f,K] @ [B,nh,K,4f]
                 W1_last = W1_init - (last_eta_mini_batch * X1).transpose(-1, -2) @ grad_l_wrt_Z1
-                # [B,nh,1,f]
+                # [B,nh,1,4f]
                 b1_last = b1_init - torch.sum(last_eta_mini_batch * grad_l_wrt_Z1, dim=-2, keepdim=True)
-                # [B,nh,f,f] - [B,nh,f,K] @ [B,nh,K,f]
+                # [B,nh,4f,f] - [B,nh,4f,K] @ [B,nh,K,f]
                 W2_last = W2_init - (last_eta_mini_batch * X2).transpose(-1, -2) @ grad_l_wrt_Z2
                 # [B,nh,1,f]
                 b2_last = b2_init - torch.sum(last_eta_mini_batch * grad_l_wrt_Z2, dim=-2, keepdim=True)
@@ -1112,7 +1114,7 @@ class TTTMLPModule(TTTBaseModule):
                     ttt_lr_eta_mini_batch, (*ttt_lr_eta_mini_batch.shape[:2], mini_batch_size, mini_batch_size)
                 )
 
-                # [B, nh, K, f, f]
+                # [B, nh, K, 4f, f]
                 grad_W2 = torch.einsum("bhki,bhkj->bhkij", X2, grad_l_wrt_Z2)
                 grad_W2 = torch.einsum("bhnk,bhkij->bhnij", torch.tril(ttt_lr_eta_mini_batch), grad_W2)
                 grad_W2 = grad_W2 + params_dic["W2_grad"].unsqueeze(2)
@@ -1120,11 +1122,11 @@ class TTTMLPModule(TTTBaseModule):
                 grad_b2 = torch.einsum("bhnk,bhki->bhni", torch.tril(ttt_lr_eta_mini_batch), grad_l_wrt_Z2)
                 grad_b2 = grad_b2 + params_dic["b2_grad"]
 
-                # [B, nh, K, f, f]
+                # [B, nh, K, f, 4f]
                 grad_W1 = torch.einsum("bhki,bhkj->bhkij", X1, grad_l_wrt_Z1)
                 grad_W1 = torch.einsum("bhnk,bhkij->bhnij", torch.tril(ttt_lr_eta_mini_batch), grad_W1)
                 grad_W1 = grad_W1 + params_dic["W1_grad"].unsqueeze(2)
-                # [B, nh, K, f]
+                # [B, nh, K, 4f]
                 grad_b1 = torch.einsum("bhnk,bhki->bhni", torch.tril(ttt_lr_eta_mini_batch), grad_l_wrt_Z1)
                 grad_b1 = grad_b1 + params_dic["b1_grad"]
 
@@ -1133,7 +1135,7 @@ class TTTMLPModule(TTTBaseModule):
                 W2_bar = W2_init.unsqueeze(2) - grad_W2 * token_eta_mini_batch.unsqueeze(-1)
                 b2_bar = b2_init - grad_b2 * token_eta_mini_batch
 
-                # [B, nh, K, 1, f] @ [B, nh, K, f, f]
+                # [B, nh, K, 1, f] @ [B, nh, K, f, 4f] -> [B, nh, K, 4f]
                 Z1_bar = (XQ_mini_batch.unsqueeze(3) @ W1_bar).squeeze(3) + b1_bar
                 X2_bar = F.gelu(Z1_bar, approximate="tanh")
                 Z2_bar = (X2_bar.unsqueeze(3) @ W2_bar).squeeze(3) + b2_bar
@@ -1181,13 +1183,14 @@ class TTTMLPModule(TTTBaseModule):
         XQW_batch = torch.empty(
             (num_mini_batch, B, self.num_heads, mini_batch_size, self.head_dim), device=device, dtype=dtype
         )
+        # XQW_batch: [num_mini_batch, B, num_heads, mini_batch_size, head_dim]
         batch_params_dic, XQW_batch = scan(
             compute_mini_batch,
             init_params_dic,
             inputs,
             XQW_batch,
             self.config.scan_checkpoint_group_size if self.training else 0,
-        )  # [NC,B,nh,CS,f]
+        )
 
         # [B, num_heads, L, C]
         if cache_params is not None:
