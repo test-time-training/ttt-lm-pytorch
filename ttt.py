@@ -207,7 +207,9 @@ class TTTConfig(PretrainedConfig):
         )
 
 
+########################
 ### Backbone Modules ###
+########################
 
 
 def rotate_half(x):
@@ -472,7 +474,9 @@ class Conv(nn.Module):
         return hidden_states
 
 
+#########################
 ### TTT Layer Modules ###
+#########################
 
 
 def scan(f, init, xs, out, checkpoint_group=0):
@@ -589,7 +593,7 @@ class TTTCache:
             self.ttt_param_names = ["W1", "b1", "W2", "b2"]
         else:
             raise ValueError(
-                f"inner_net_type {config.ttt_layer_type} not supported yet"
+                f"TTT Layer Type {config.ttt_layer_type} not supported yet"
             )
 
         self.conv_states_dic = defaultdict(dict)
@@ -970,7 +974,7 @@ class TTTBase(nn.Module):
         cache_params: Optional[TTTCache] = None,
     ):
         raise NotImplementedError(
-            "ttt method must be implemented in TTTBaseModule subclasses."
+            "ttt method must be implemented in TTTBase subclasses."
         )
 
     def forward(
@@ -1002,7 +1006,7 @@ class TTTBase(nn.Module):
         output_hidden_states = []
         # when input sequence length is not a multiple of mini_batch_size
         # we need to compute them seperately, when computing the reminder,
-        # we will need the last_mini_batch_params_dict to continue inner loop learning
+        # we will need the last_mini_batch_params_dict to continue TTT learning
         if num_mini_batch > 0:
             inputs = {
                 "XQ": XQ[:, :, : num_mini_batch * self.mini_batch_size],
@@ -1044,11 +1048,10 @@ class TTTBase(nn.Module):
 class TTTLinear(TTTBase):
     def __init__(self, config: TTTConfig, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
-        # inner loop weight matrix initialization for TTT-Linear
+        # TTT model initialization for TTT-Linear
         self.W1 = nn.Parameter(
             torch.normal(0, 0.02, size=(self.num_heads, self.head_dim, self.head_dim))
         )
-        # inner loop bias initialization
         self.b1 = nn.Parameter(torch.zeros(self.num_heads, 1, self.head_dim))
 
     def ttt(
@@ -1226,7 +1229,7 @@ class TTTLinear(TTTBase):
 class TTTMLP(TTTBase):
     def __init__(self, config: TTTConfig, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
-        # inner loop weight matrix initialization for TTT-MLP
+        # TTT model initialization for TTT-MLP
         self.W1 = nn.Parameter(
             torch.normal(
                 0, 0.02, size=(self.num_heads, self.head_dim, 4 * self.head_dim)
@@ -1474,7 +1477,9 @@ class TTTMLP(TTTBase):
         return XQW_batch, batch_params_dict
 
 
+################################
 ### E2E Architecture Modules ###
+################################
 
 
 class Block(nn.Module):
@@ -1484,20 +1489,20 @@ class Block(nn.Module):
         self.pre_conv = config.pre_conv
 
         if config.ttt_layer_type == "linear":
-            ttt_module = TTTLinearModule
+            ttt_layer = TTTLinear
         elif config.ttt_layer_type == "mlp":
-            ttt_module = TTTMLPModule
+            ttt_layer = TTTMLP
         else:
             raise ValueError(f"Invalid ttt_layer_type: {config.ttt_layer_type}")
 
-        self.seq_modeling_block = ttt_module(config=config, layer_idx=layer_idx)
+        self.seq_modeling_block = ttt_layer(config=config, layer_idx=layer_idx)
 
         self.mlp = SwiGluMLP(config)
         if self.pre_conv:
             self.conv = Conv(config, layer_idx)
 
-        self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_ttt_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.seq_norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.ffn_norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.layer_idx = layer_idx
 
     def forward(
@@ -1514,9 +1519,9 @@ class Block(nn.Module):
 
         residual = hidden_states
 
-        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states = self.seq_norm(hidden_states)
 
-        # TTT
+        # TTT Layer
         hidden_states = self.seq_modeling_block(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -1525,9 +1530,9 @@ class Block(nn.Module):
         )
         hidden_states = residual + hidden_states
 
-        # Fully Connected
+        # Feed-Forward-Network
         residual = hidden_states
-        hidden_states = self.post_ttt_layernorm(hidden_states)
+        hidden_states = self.ffn_norm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
@@ -1607,7 +1612,7 @@ class TTTCausalLMOutput(ModelOutput):
 
 class TTTModel(TTTPreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Block`]
+    Decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Block`]
 
     Args:
         config: TTTConfig
@@ -1824,16 +1829,13 @@ class TTTForCausalLM(TTTPreTrainedModel):
         *,
         output_attentions: Optional[bool] = None,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
-        r"""
+        """
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Returns:
-
-        ```"""
+        """
         output_hidden_states = (
             output_hidden_states
             if output_hidden_states is not None
