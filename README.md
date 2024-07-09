@@ -33,10 +33,10 @@ Our implementation is based on Huggingface Transformers. You can use the followi
 
 ```python
 from transformers import AutoTokenizer
-from modeling_ttt import TTTForCausalLM, TTTConfig, TTT_STANDARD_CONFIGS
+from ttt import TTTForCausalLM, TTTConfig, TTT_STANDARD_CONFIGS
 
 # Initializing a TTT ttt-1b style configuration
-# configuration = TTTConfig(**TTT_STANDARD_CONFIGS['ttt-1b']) is equivalent to the following
+# configuration = TTTConfig(**TTT_STANDARD_CONFIGS['1b']) is equivalent to the following
 configuration = TTTConfig()
 
 # Initializing a model from the ttt-1b style configuration
