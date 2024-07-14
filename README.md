@@ -4,10 +4,13 @@
 | [**JAX Codebase**](https://github.com/test-time-training/ttt-lm-jax)
 | [**Setup**](#environment-setup)
 | [**Quick Start**](#quick-start)
+| [**Inference Benchmark**](https://github.com/test-time-training/ttt-lm-kernels)
 
 This is the official PyTorch model implementation of [Learning to (Learn at Test Time): RNNs with Expressive Hidden States](https://arxiv.org/abs/2407.04620). 
 We **do not recommend training** with this codebase, because it is written in pure PyTorch without any systems optimization, so training will be slow, especially when the per-device batch size is small.
-For training code, or to replicate results from our paper, please view our [JAX codebase](https://github.com/test-time-training/ttt-lm-jax).
+
+
+For training code, or to replicate results from our paper, please view our [JAX codebase](https://github.com/test-time-training/ttt-lm-jax). For inference kernels, or to replicate speed benchmarks from our paper, please view our [kernel implementations](https://github.com/test-time-training/ttt-lm-kernels).
 
 ## Abstract
 
