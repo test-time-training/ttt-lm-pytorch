@@ -63,4 +63,4 @@ out_str = tokenizer.batch_decode(out_ids, skip_special_tokens=True)
 print(out_str)
 ```
 
-**Note: This is a naive implementation of TTT layers for tutorial purposes.** This model can be trained using Huggingface Accelerate, or custom training loops. We will release a faster inference kernel soon.
+**Note: This is a naive implementation of TTT layers for tutorial purposes.** This model can be trained using Huggingface Accelerate, or custom training loops. We have released our faster inference kernel and its speed benchmark [here](https://github.com/test-time-training/ttt-lm-kernels).
